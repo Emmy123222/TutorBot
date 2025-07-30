@@ -103,17 +103,7 @@ const Header: React.FC<HeaderProps> = ({
               animate={{ opacity: 1, x: 0 }}
               className="flex items-center space-x-2"
             >
-              <button
-                onClick={() => setDarkMode(!darkMode)}
-                className={`p-2 rounded-lg transition-all duration-200 hover:scale-105 ${
-                  darkMode 
-                    ? 'text-gray-400 hover:text-yellow-400 hover:bg-gray-800/50' 
-                    : 'text-gray-600 hover:text-blue-600 hover:bg-gray-100/50'
-                }`}
-                title={darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-              >
-                {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-              </button>
+             
               <CivicLoginButton darkMode={darkMode} />
             </motion.div>
           </div>
