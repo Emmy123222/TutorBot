@@ -1,114 +1,186 @@
 import React, { useState, useEffect } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { CivicAuthProvider, useUser } from '@civic/auth/react';
-import Header from './components/Header';
-import StudyMaterialUpload from './components/StudyMaterialUpload';
-import Summary from './components/Summary';
-import Flashcards from './components/Flashcards';
-import Quiz from './components/Quiz';
-import StudyPlan from './components/StudyPlan';
-import ChatCoach from './components/ChatCoach';
+import LandingPage from './components/LandingPage';
+import ExamRegistration from './components/ExamRegistration';
+import StudyStrategies from './components/StudyStrategies';
+import ExamResultSubmission from './components/ExamResultSubmission';
 import StarBackground from './components/StarBackground';
-import { StudySession } from './types';
+import { ExamRegistration as ExamRegistrationType, ExamQuestion, ExamResult } from './types';
+
+// Mock exam questions for demo
+const MOCK_QUESTIONS: ExamQuestion[] = [
+  {
+    id: '1',
+    examType: 'usmle-step1',
+    state: 'CA',
+    question: 'A 45-year-old patient presents with chest pain. What is the most likely diagnosis?',
+    options: ['Myocardial infarction', 'Gastroesophageal reflux', 'Pulmonary embolism', 'Anxiety disorder', 'Costochondritis'],
+    correctAnswer: 0,
+    explanation: 'Given the age and presentation, myocardial infarction should be the primary consideration.',
+    difficulty: 'medium',
+    timeAllowed: 90,
+    category: 'cardiology',
+    verified: true,
+    createdAt: new Date(),
+  },
+  {
+    id: '2',
+    examType: 'bar-exam',
+    state: 'NY',
+    question: 'In contract law, what constitutes a valid offer?',
+    options: ['Intent to be bound', 'Definite terms', 'Communication to offeree', 'All of the above', 'None of the above'],
+    correctAnswer: 3,
+    explanation: 'A valid offer requires intent, definite terms, and communication to the offeree.',
+    difficulty: 'easy',
+    timeAllowed: 120,
+    category: 'contracts',
+    verified: true,
+    createdAt: new Date(),
+  },
+];
 
 function App() {
-  const [activeTab, setActiveTab] = useState<string>('upload');
-  const [currentSession, setCurrentSession] = useState<StudySession | null>(null);
+  const [currentView, setCurrentView] = useState<'landing' | 'registration' | 'study' | 'results'>('landing');
+  const [currentRegistration, setCurrentRegistration] = useState<ExamRegistrationType | null>(null);
   const [darkMode, setDarkMode] = useState(true);
-  const [sessions, setSessions] = useState<StudySession[]>([]);
+  const [examExpired, setExamExpired] = useState(false);
 
-  // Log to debug Civic Auth initialization
   useEffect(() => {
-    console.log('App initialized with CivicAuthProvider, clientId: 7f8e5073-ab64-46df-825e-07d489f612ff');
+    // Check if exam date has passed
+    if (currentRegistration && new Date() > currentRegistration.examDate) {
+      setExamExpired(true);
+    }
+  }, [currentRegistration]);
+
+  const handleRegistrationComplete = (registration: ExamRegistrationType) => {
+    setCurrentRegistration(registration);
+    setCurrentView('study');
+  };
+
+  const handleResultSubmitted = (result: ExamResult) => {
+    // Reactivate study features
+    setExamExpired(false);
+    setCurrentView('study');
+    
+    // If failed, could load questions from successful candidates here
+    if (result.actualExamResult === 'fail') {
+      console.log('Loading questions from successful candidates...');
+    }
+  };
+
+  const handleStudySessionComplete = (answers: any[], score: number) => {
+    console.log('Study session completed:', { answers, score });
+  };
+
+  // Check if user needs to report exam results
+  useEffect(() => {
+    if (examExpired && currentRegistration && !currentRegistration.examResult) {
+      setCurrentView('results');
+    }
   }, []);
 
   useEffect(() => {
-    // Load sessions from localStorage
-    const saved = localStorage.getItem('tutorbot-sessions');
+    // Load registration from localStorage
+    const saved = localStorage.getItem('exam-registration');
     if (saved) {
-      setSessions(JSON.parse(saved));
+      const registration = JSON.parse(saved);
+      setCurrentRegistration(registration);
+      if (registration.isActive) {
+        setCurrentView('study');
+      }
     }
   }, []);
 
   useEffect(() => {
-    // Save sessions to localStorage
-    localStorage.setItem('tutorbot-sessions', JSON.stringify(sessions));
-  }, [sessions]);
-
-  const saveSession = (session: StudySession) => {
-    const updatedSessions = [...sessions];
-    const existingIndex = updatedSessions.findIndex(s => s.id === session.id);
-    
-    if (existingIndex >= 0) {
-      updatedSessions[existingIndex] = session;
-    } else {
-      updatedSessions.push(session);
+    // Save registration to localStorage
+    if (currentRegistration) {
+      localStorage.setItem('exam-registration', JSON.stringify(currentRegistration));
     }
-    
-    setSessions(updatedSessions);
-    setCurrentSession(session);
-  };
-
-  const renderContent = () => {
-    switch (activeTab) {
-      case 'upload':
-        return <StudyMaterialUpload onSessionCreate={saveSession} />;
-      case 'summary':
-        return currentSession ? <Summary session={currentSession} /> : <div className="text-center text-gray-400">No study material uploaded yet</div>;
-      case 'flashcards':
-        return currentSession ? <Flashcards session={currentSession} onUpdate={saveSession} /> : <div className="text-center text-gray-400">No study material uploaded yet</div>;
-      case 'quiz':
-        return currentSession ? <Quiz session={currentSession} onUpdate={saveSession} /> : <div className="text-center text-gray-400">No study material uploaded yet</div>;
-      case 'plan':
-        return currentSession ? <StudyPlan session={currentSession} onUpdate={saveSession} /> : <div className="text-center text-gray-400">No study material uploaded yet</div>;
-      case 'chat':
-        return currentSession ? <ChatCoach session={currentSession} onUpdate={saveSession} /> : <div className="text-center text-gray-400">No study material uploaded yet</div>;
-      default:
-        return <StudyMaterialUpload onSessionCreate={saveSession} />;
-    }
-  };
+  }, [currentRegistration]);
 
   return (
     <CivicAuthProvider clientId="7f8e5073-ab64-46df-825e-07d489f612ff">
       <AppContent
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        currentView={currentView}
+        setCurrentView={setCurrentView}
         darkMode={darkMode}
         setDarkMode={setDarkMode}
-        currentSession={currentSession}
-        sessions={sessions}
-        saveSession={saveSession}
-        renderContent={renderContent}
+        currentRegistration={currentRegistration}
+        examExpired={examExpired}
+        onRegistrationComplete={handleRegistrationComplete}
+        onResultSubmitted={handleResultSubmitted}
+        onStudySessionComplete={handleStudySessionComplete}
       />
     </CivicAuthProvider>
   );
 }
 
 interface AppContentProps {
-  activeTab: string;
-  setActiveTab: (tab: string) => void;
+  currentView: 'landing' | 'registration' | 'study' | 'results';
+  setCurrentView: (view: 'landing' | 'registration' | 'study' | 'results') => void;
   darkMode: boolean;
   setDarkMode: (dark: boolean) => void;
-  currentSession: StudySession | null;
-  sessions: StudySession[];
-  saveSession: (session: StudySession) => void;
-  renderContent: () => JSX.Element;
+  currentRegistration: ExamRegistrationType | null;
+  examExpired: boolean;
+  onRegistrationComplete: (registration: ExamRegistrationType) => void;
+  onResultSubmitted: (result: ExamResult) => void;
+  onStudySessionComplete: (answers: any[], score: number) => void;
 }
 
 const AppContent: React.FC<AppContentProps> = ({
-  activeTab,
-  setActiveTab,
+  currentView,
+  setCurrentView,
   darkMode,
   setDarkMode,
-  currentSession,
-  renderContent,
+  currentRegistration,
+  examExpired,
+  onRegistrationComplete,
+  onResultSubmitted,
+  onStudySessionComplete,
 }) => {
   const { user, isLoading, error, signIn } = useUser();
 
-  // Log auth state for debugging
-  useEffect(() => {
-    console.log('Auth state:', { user, isLoading, error });
-  }, [user, isLoading, error]);
+  const renderContent = () => {
+    switch (currentView) {
+      case 'landing':
+        return <LandingPage onGetStarted={() => setCurrentView('registration')} />;
+      case 'registration':
+        return <ExamRegistration onRegistrationComplete={onRegistrationComplete} />;
+      case 'study':
+        if (examExpired) {
+          return (
+            <div className="text-center py-12">
+              <h2 className="text-2xl font-bold text-white mb-4">Study Features Deactivated</h2>
+              <p className="text-gray-400 mb-6">
+                Your exam date has passed. Please report your results to reactivate your study features.
+              </p>
+              <button
+                onClick={() => setCurrentView('results')}
+                className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+              >
+                Report Exam Results
+              </button>
+            </div>
+          );
+        }
+        return (
+          <StudyStrategies 
+            questions={MOCK_QUESTIONS} 
+            onSessionComplete={onStudySessionComplete}
+          />
+        );
+      case 'results':
+        return currentRegistration ? (
+          <ExamResultSubmission 
+            registrationId={currentRegistration.id}
+            onResultSubmitted={onResultSubmitted}
+          />
+        ) : null;
+      default:
+        return <LandingPage onGetStarted={() => setCurrentView('registration')} />;
+    }
+  };
 
   // If authentication is loading, show a loading state
   if (isLoading) {
@@ -156,7 +228,7 @@ const AppContent: React.FC<AppContentProps> = ({
           <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent mb-4">
             Welcome to TutorBot
           </h1>
-          <p className="text-gray-400 mb-6">Please sign in to access your AI Study Coach.</p>
+          <p className="text-gray-400 mb-6">Please sign in to access your Professional Exam Prep Platform.</p>
           <button
             onClick={() => {
               try {
@@ -180,14 +252,6 @@ const AppContent: React.FC<AppContentProps> = ({
       <StarBackground darkMode={darkMode} />
       
       <div className="relative z-10">
-        <Header 
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          darkMode={darkMode}
-          setDarkMode={setDarkMode}
-          hasSession={!!user && !!currentSession}
-        />
-        
         <main className="container mx-auto px-4 py-8">
           <AnimatePresence mode="wait">
             {renderContent()}
