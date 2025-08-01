@@ -1,8 +1,12 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Calendar, CreditCard, MapPin, GraduationCap, ArrowRight, Check } from 'lucide-react';
+import { loadStripe } from '@stripe/stripe-js';
 import { ExamRegistration as ExamRegistrationType, ProfessionalExamType, USState } from '../types';
 import { PROFESSIONAL_EXAMS, US_STATES } from '../data/examTypes';
+
+// Initialize Stripe with the Publishable Key from .env
+const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || '');
 
 interface ExamRegistrationProps {
   onRegistrationComplete: (registration: ExamRegistrationType) => void;
@@ -13,7 +17,9 @@ const ExamRegistration: React.FC<ExamRegistrationProps> = ({ onRegistrationCompl
   const [selectedExam, setSelectedExam] = useState<ProfessionalExamType | null>(null);
   const [selectedState, setSelectedState] = useState<USState | null>(null);
   const [examDate, setExamDate] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [registration, setRegistration] = useState<ExamRegistrationType | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [processing, setProcessing] = useState(false);
 
   const handleExamSelect = (exam: ProfessionalExamType) => {
     setSelectedExam(exam);
@@ -26,49 +32,51 @@ const ExamRegistration: React.FC<ExamRegistrationProps> = ({ onRegistrationCompl
   };
 
   const handleDateSelect = () => {
-    if (examDate) {
+    if (examDate && selectedExam && selectedState) {
+      const newRegistration: ExamRegistrationType = {
+        id: Date.now().toString(),
+        userId: 'current-user', // Replace with actual user ID from auth
+        examType: selectedExam,
+        state: selectedState,
+        examDate: new Date(examDate),
+        paymentStatus: 'pending',
+        isActive: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      setRegistration(newRegistration);
       setStep(4);
     }
   };
 
   const handlePayment = async () => {
-    if (!selectedExam || !selectedState || !examDate) return;
+    if (!registration) return;
 
-    setLoading(true);
-    
+    setProcessing(true);
+    setError(null);
+
     try {
-      // Create registration
-      const registration: ExamRegistrationType = {
-        id: Date.now().toString(),
-        userId: 'current-user', // This would come from auth
-        examType: selectedExam,
-        state: selectedState,
-        examDate: new Date(examDate),
-        paymentStatus: 'pending',
-        isActive: false, // Will be activated after payment
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
+      const stripe = await stripePromise;
+      if (!stripe) {
+        setError('Stripe failed to initialize. Please check your configuration.');
+        setProcessing(false);
+        return;
+      }
 
-      // Simulate payment processing
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      registration.paymentStatus = 'completed';
-      registration.isActive = true;
-      registration.stripePaymentId = 'pi_' + Math.random().toString(36).substr(2, 9);
+      // Redirect to pre-generated Stripe Checkout URL
+      // Replace with your actual Checkout Session URL from Stripe Dashboard
+      const checkoutUrl = 'https://buy.stripe.com/6oUdR83Kl9Bm85lfGw5EY00';
+      window.location.href = checkoutUrl;
 
-      onRegistrationComplete(registration);
-    } catch (error) {
-      console.error('Payment failed:', error);
-    } finally {
-      setLoading(false);
+      // Note: No session ID handling; payment verification must be manual or via webhooks
+    } catch (err) {
+      setError('An error occurred while initiating payment');
+      setProcessing(false);
     }
   };
 
   const groupedExams = PROFESSIONAL_EXAMS.reduce((acc, exam) => {
-    if (!acc[exam.category]) {
-      acc[exam.category] = [];
-    }
+    if (!acc[exam.category]) acc[exam.category] = [];
     acc[exam.category].push(exam);
     return acc;
   }, {} as Record<string, ProfessionalExamType[]>);
@@ -88,38 +96,29 @@ const ExamRegistration: React.FC<ExamRegistrationProps> = ({ onRegistrationCompl
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="max-w-4xl mx-auto"
-    >
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-4xl mx-auto">
       <div className="text-center mb-8">
         <h2 className="text-3xl font-bold mb-4 bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
           Professional Exam Registration
         </h2>
-        <p className="text-gray-500 text-lg">
-          Register for your professional licensing examination
-        </p>
+        <p className="text-gray-500 text-lg">Register for your professional licensing examination</p>
       </div>
 
-      {/* Progress Steps */}
       <div className="flex justify-center mb-8">
         <div className="flex items-center space-x-4">
           {[1, 2, 3, 4].map((stepNum) => (
             <div key={stepNum} className="flex items-center">
               <div
                 className={`w-10 h-10 rounded-full flex items-center justify-center font-medium ${
-                  step >= stepNum
-                    ? 'bg-purple-600 text-white'
-                    : 'bg-gray-700 text-gray-400'
+                  step >= stepNum ? 'bg-purple-600 text-white' : 'bg-gray-700 text-gray-400'
                 }`}
               >
                 {step > stepNum ? <Check className="w-5 h-5" /> : stepNum}
               </div>
               {stepNum < 4 && (
-                <ArrowRight className={`w-5 h-5 mx-2 ${
-                  step > stepNum ? 'text-purple-400' : 'text-gray-600'
-                }`} />
+                <ArrowRight
+                  className={`w-5 h-5 mx-2 ${step > stepNum ? 'text-purple-400' : 'text-gray-600'}`}
+                />
               )}
             </div>
           ))}
@@ -127,14 +126,12 @@ const ExamRegistration: React.FC<ExamRegistrationProps> = ({ onRegistrationCompl
       </div>
 
       <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-8 border border-gray-700">
-        {/* Step 1: Select Exam Type */}
         {step === 1 && (
           <div>
             <h3 className="text-xl font-bold mb-6 flex items-center">
               <GraduationCap className="w-6 h-6 mr-3 text-purple-400" />
               Select Your Professional Exam
             </h3>
-            
             <div className="space-y-6">
               {Object.entries(groupedExams).map(([category, exams]) => (
                 <div key={category}>
@@ -163,20 +160,17 @@ const ExamRegistration: React.FC<ExamRegistrationProps> = ({ onRegistrationCompl
           </div>
         )}
 
-        {/* Step 2: Select State */}
         {step === 2 && selectedExam && (
           <div>
             <h3 className="text-xl font-bold mb-6 flex items-center">
               <MapPin className="w-6 h-6 mr-3 text-purple-400" />
               Select Your State
             </h3>
-            
             <div className="mb-4 p-4 bg-purple-600/20 border border-purple-600 rounded-lg">
               <p className="text-purple-300">
                 Selected Exam: <strong>{selectedExam.name}</strong>
               </p>
             </div>
-
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 max-h-96 overflow-y-auto">
               {US_STATES.map((state) => (
                 <button
@@ -192,14 +186,12 @@ const ExamRegistration: React.FC<ExamRegistrationProps> = ({ onRegistrationCompl
           </div>
         )}
 
-        {/* Step 3: Select Exam Date */}
         {step === 3 && selectedExam && selectedState && (
           <div>
             <h3 className="text-xl font-bold mb-6 flex items-center">
               <Calendar className="w-6 h-6 mr-3 text-purple-400" />
               Select Your Exam Date
             </h3>
-            
             <div className="mb-6 space-y-2">
               <div className="p-4 bg-purple-600/20 border border-purple-600 rounded-lg">
                 <p className="text-purple-300">
@@ -207,7 +199,6 @@ const ExamRegistration: React.FC<ExamRegistrationProps> = ({ onRegistrationCompl
                 </p>
               </div>
             </div>
-
             <div className="max-w-md mx-auto">
               <label className="block text-gray-300 mb-2">Exam Date</label>
               <input
@@ -217,14 +208,12 @@ const ExamRegistration: React.FC<ExamRegistrationProps> = ({ onRegistrationCompl
                 min={new Date().toISOString().split('T')[0]}
                 className="w-full p-4 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
               />
-              
               <div className="mt-4 p-4 bg-yellow-600/20 border border-yellow-600 rounded-lg">
                 <p className="text-yellow-300 text-sm">
-                  <strong>Important:</strong> Your study features will be deactivated after your exam date. 
+                  <strong>Important:</strong> Your study features will be deactivated after your exam date.
                   You can reactivate them by reporting your exam results.
                 </p>
               </div>
-
               <button
                 onClick={handleDateSelect}
                 disabled={!examDate}
@@ -236,14 +225,12 @@ const ExamRegistration: React.FC<ExamRegistrationProps> = ({ onRegistrationCompl
           </div>
         )}
 
-        {/* Step 4: Payment */}
-        {step === 4 && selectedExam && selectedState && examDate && (
+        {step === 4 && selectedExam && selectedState && examDate && registration && (
           <div>
             <h3 className="text-xl font-bold mb-6 flex items-center">
               <CreditCard className="w-6 h-6 mr-3 text-purple-400" />
               Complete Payment
             </h3>
-            
             <div className="max-w-md mx-auto">
               <div className="mb-6 p-6 bg-gray-700/50 rounded-lg border border-gray-600">
                 <h4 className="font-semibold text-white mb-4">Registration Summary</h4>
@@ -267,20 +254,19 @@ const ExamRegistration: React.FC<ExamRegistrationProps> = ({ onRegistrationCompl
                   </div>
                 </div>
               </div>
-
               <div className="mb-6 p-4 bg-blue-600/20 border border-blue-600 rounded-lg">
                 <p className="text-blue-300 text-sm">
-                  This fee includes access to AI-powered study materials, practice exams, 
+                  This fee includes access to AI-powered study materials, practice exams,
                   and personalized learning strategies until your exam date.
                 </p>
               </div>
-
+              {error && <div className="text-red-400 mb-4">{error}</div>}
               <button
                 onClick={handlePayment}
-                disabled={loading}
+                disabled={processing}
                 className="w-full px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:scale-105 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
               >
-                {loading ? (
+                {processing ? (
                   <>
                     <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
                     <span>Processing Payment...</span>
@@ -292,7 +278,6 @@ const ExamRegistration: React.FC<ExamRegistrationProps> = ({ onRegistrationCompl
                   </>
                 )}
               </button>
-
               <p className="text-xs text-gray-500 text-center mt-4">
                 Secure payment processing powered by Stripe
               </p>
