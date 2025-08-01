@@ -9,17 +9,22 @@ import {
   Pause,
   ArrowRight,
   Trophy,
-  Target
+  Target,
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
 import { ExamQuestion, StudyStrategy, UserAnswer } from '../types';
+import { generateExamQuestions } from '../utils/api';
 
 interface StudyStrategiesProps {
-  questions: ExamQuestion[];
+  examType: string;
+  state: string;
   onSessionComplete: (answers: UserAnswer[], score: number) => void;
 }
 
-const StudyStrategies: React.FC<StudyStrategiesProps> = ({ questions, onSessionComplete }) => {
+const StudyStrategies: React.FC<StudyStrategiesProps> = ({ examType, state, onSessionComplete }) => {
   const [selectedStrategy, setSelectedStrategy] = useState<StudyStrategy['type'] | null>(null);
+  const [questions, setQuestions] = useState<ExamQuestion[]>([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<UserAnswer[]>([]);
   const [sessionActive, setSessionActive] = useState(false);
@@ -29,6 +34,8 @@ const StudyStrategies: React.FC<StudyStrategiesProps> = ({ questions, onSessionC
   const [sessionComplete, setSessionComplete] = useState(false);
   const [score, setScore] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Timer effect
   useEffect(() => {
@@ -49,13 +56,38 @@ const StudyStrategies: React.FC<StudyStrategiesProps> = ({ questions, onSessionC
     return () => clearInterval(interval);
   }, [sessionActive, timeLeft, isPaused]);
 
-  const startStrategy = (strategy: StudyStrategy['type']) => {
+  const loadQuestions = async (difficulty: 'easy' | 'medium' | 'hard' = 'medium') => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const generatedQuestions = await generateExamQuestions(examType, state, difficulty, 10);
+      setQuestions(generatedQuestions);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load questions');
+      setQuestions([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const startStrategy = async (strategy: StudyStrategy['type']) => {
+    if (questions.length === 0) {
+      await loadQuestions();
+    }
+    
+    if (questions.length === 0) {
+      setError('No questions available. Please try again.');
+      return;
+    }
+
     setSelectedStrategy(strategy);
     setCurrentQuestionIndex(0);
     setAnswers([]);
     setSessionActive(true);
     setSessionComplete(false);
     setScore(0);
+    setError(null);
     
     const currentQuestion = questions[0];
     if (strategy === 'flashcards') {
@@ -116,7 +148,7 @@ const StudyStrategies: React.FC<StudyStrategiesProps> = ({ questions, onSessionC
       setShowAnswer(true);
       setTimeout(() => {
         nextQuestion();
-      }, 2000);
+      }, 3000);
     } else {
       nextQuestion();
     }
@@ -161,7 +193,45 @@ const StudyStrategies: React.FC<StudyStrategiesProps> = ({ questions, onSessionC
     setShowAnswer(false);
     setUserInput('');
     setScore(0);
+    setError(null);
   };
+
+  if (loading) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="max-w-4xl mx-auto text-center"
+      >
+        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-12 border border-gray-700">
+          <Loader2 className="w-12 h-12 mx-auto mb-4 text-purple-400 animate-spin" />
+          <p className="text-lg text-gray-300">Loading AI-generated exam questions...</p>
+          <p className="text-sm text-gray-500 mt-2">This may take a few moments</p>
+        </div>
+      </motion.div>
+    );
+  }
+
+  if (error) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="max-w-4xl mx-auto text-center"
+      >
+        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-12 border border-gray-700">
+          <AlertCircle className="w-12 h-12 mx-auto mb-4 text-red-400" />
+          <p className="text-lg text-red-300 mb-4">{error}</p>
+          <button
+            onClick={() => loadQuestions()}
+            className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+          >
+            Try Again
+          </button>
+        </div>
+      </motion.div>
+    );
+  }
 
   if (!selectedStrategy) {
     return (
@@ -175,7 +245,7 @@ const StudyStrategies: React.FC<StudyStrategiesProps> = ({ questions, onSessionC
             Choose Your Study Strategy
           </h2>
           <p className="text-gray-500 text-lg">
-            Select the learning method that works best for you
+            Select the learning method that works best for your {examType} preparation
           </p>
         </div>
 
@@ -310,6 +380,26 @@ const StudyStrategies: React.FC<StudyStrategiesProps> = ({ questions, onSessionC
     );
   }
 
+  if (questions.length === 0) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="max-w-4xl mx-auto text-center"
+      >
+        <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-12 border border-gray-700">
+          <p className="text-lg text-gray-300 mb-4">Loading exam questions...</p>
+          <button
+            onClick={() => loadQuestions()}
+            className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+          >
+            Load Questions
+          </button>
+        </div>
+      </motion.div>
+    );
+  }
+
   const currentQuestion = questions[currentQuestionIndex];
   const progress = ((currentQuestionIndex + 1) / questions.length) * 100;
 
@@ -328,7 +418,7 @@ const StudyStrategies: React.FC<StudyStrategiesProps> = ({ questions, onSessionC
             {selectedStrategy === 'typed-answer' && 'Typed Answer Practice'}
           </h2>
           <p className="text-gray-400">
-            Question {currentQuestionIndex + 1} of {questions.length}
+            Question {currentQuestionIndex + 1} of {questions.length} • {examType} • {state}
           </p>
         </div>
         
@@ -371,6 +461,9 @@ const StudyStrategies: React.FC<StudyStrategiesProps> = ({ questions, onSessionC
           }`}>
             {currentQuestion.difficulty}
           </span>
+          <span className="ml-3 px-3 py-1 bg-blue-600/20 text-blue-400 rounded-full text-sm font-medium">
+            {currentQuestion.category}
+          </span>
         </div>
 
         <h3 className="text-xl font-bold mb-6 text-white leading-relaxed">
@@ -400,7 +493,7 @@ const StudyStrategies: React.FC<StudyStrategiesProps> = ({ questions, onSessionC
                 className="bg-green-600/20 border border-green-600 rounded-lg p-6"
               >
                 <h4 className="font-semibold text-green-400 mb-2">Answer:</h4>
-                <p className="text-white">{currentQuestion.correctAnswer}</p>
+                <p className="text-white">{currentQuestion.options?.[currentQuestion.correctAnswer as number] || currentQuestion.correctAnswer}</p>
                 {currentQuestion.explanation && (
                   <div className="mt-4">
                     <h5 className="font-medium text-green-300 mb-1">Explanation:</h5>
