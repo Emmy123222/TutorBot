@@ -278,6 +278,3 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 <<<<<<< HEAD
 **TutorBot** - Democratizing access to personalized education through AI technology. Built with ❤️ for students everywhere who deserve quality educational support.
-=======
-**TutorBot** - Democratizing access to personalized education through AI technology. Built with ❤️ for students everywhere who deserve quality educational support.
->>>>>>> 72d9fda9b3640a3fd9875d2ea6733e35e04f51a7
